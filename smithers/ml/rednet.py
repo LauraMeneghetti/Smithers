@@ -6,6 +6,11 @@ import copy
 import torch
 import torch.nn as nn
 
+if torch.cuda.is_available(): #MODIF tutto il pezzo
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
+
 class RedNet(nn.Module):
     '''
     Creation of the reduced Neural Network starting from the
@@ -58,6 +63,7 @@ class RedNet(nn.Module):
         :return: output n_images x n_class
         :rtype: torch.tensor
         '''
+        x = x.to(device)
         x = self.premodel(x)
         x = x.view(x.size(0), -1)
         x = self.proj_model(x)

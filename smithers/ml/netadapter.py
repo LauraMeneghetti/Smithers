@@ -137,7 +137,7 @@ class NetAdapter():
         targets = list(train_labels)
         fnn = FNN(self.red_dim, n_class, n_neurons).to(device)
         epochs = 500
-        training_fnn(fnn, epochs, matrix_red, targets)
+        training_fnn(fnn, epochs, matrix_red.to(device), targets)
 
         return fnn
 
