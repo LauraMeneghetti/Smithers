@@ -8,6 +8,8 @@ import torch
 from smithers.ml.rednet import RedNet
 from smithers.ml.fnn import FNN, training_fnn
 from smithers.ml.utils import PossibleCutIdx, spatial_gradients, forward_dataset, projection
+from smithers.ml.utils import randomized_svd
+
 #from ATHENA.athena.active import ActiveSubspaces
 from smithers.ml.pcemodel import PCEModel
 
@@ -84,6 +86,19 @@ class NetAdapter():
 
         return proj_mat
 
+    def _reduce_RandSVD(self, matrix_features): #MODIF
+        '''
+        Function that performs the reduction using the Randomized SVD (RandSVD).
+        :param torch.Tensor matrix_features: (n_images x n_feat) matrix
+            containing the output of the pre-model that needs to be reduced.
+        :returns: tensor proj_mat representing the projection matrix
+            obtained via RandSVD (n_feat x red_dim).
+        :rtype: torch.Tensor
+        '''
+        u, s, v = randomized_svd(matrix_features, self.red_dim)
+
+        return u.to(device)
+
     def _reduce(self, pre_model, post_model, train_dataset, train_loader):
         '''
         Function that performs the reduction of the high dimensional
@@ -112,6 +127,10 @@ class NetAdapter():
         elif self.red_method == 'POD':
             #code for POD
             proj_mat = self._reduce_POD(matrix_features)
+
+        elif self.red_method == 'RandSVD': #MODIF
+            #code for RandSVD
+            proj_mat = self._reduce_RandSVD(matrix_features)
 
         else:
             raise ValueError
@@ -225,6 +244,7 @@ class NetAdapter():
         :return: reduced net
         :rtype: nn.Module
         '''
+        print('Initializing reduction. Chosen reduction method is: '+self.red_method, flush=True)
         input_type = train_dataset.__getitem__(0)[0].dtype
         possible_cut_idx = PossibleCutIdx(input_network)
         cut_idxlayer = possible_cut_idx[self.cutoff_idx]

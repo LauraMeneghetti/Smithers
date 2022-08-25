@@ -7,7 +7,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from sklearn import decomposition
+from scipy import linalg
 
+
+
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
 def save_checkpoint(epoch, model, optimizer, cut_idx=None):
     '''
@@ -188,11 +196,10 @@ def projection(proj_mat, data_loader, matrix):
         batch = batch.to(device) #MODIF
 
         with torch.no_grad():
-            proj_data = (matrix[batch_old : batch_old +
-                                batch.size()[0], :] @
-                         proj_mat).cpu()
+            #proj_data = (matrix[batch_old : batch_old + batch.size()[0], : ] @ proj_mat).cpu()
+            proj_data = (matrix[batch_old : batch_old + batch.size()[0], : ] @ proj_mat).to(device)
             batch_old = batch.size()[0]
-        matrix_red = torch.cat([matrix_red, proj_data.cpu()])
+        matrix_red = torch.cat([matrix_red, proj_data.to(device)])
 
     return matrix_red
 
@@ -488,3 +495,41 @@ def train_kd(student,
         for param_group in optimizer.param_groups:
             param_group['lr'] = param_group['lr'] * (epoch) / (epoch + 1)
     return accuracy, train_loss_val """
+
+
+
+# RANDOM SVD: BEGIN
+
+# computes an orthonormal matrix whose range approximates the range of A
+# power_iteration_normalizer can be safe_sparse_dot (fast but unstable), LU (imbetween), or QR (slow but most accurate)
+def randomized_range_finder(A, size, n_iter = 2):
+    A = A.to(device)
+    Q = torch.randn(A.shape[1],size)
+    # Q = np.random.normal(size=(A.shape[1], size))
+    
+    for i in range(n_iter):
+        Q = torch.linalg.lu(A @ Q)[1]
+        Q = torch.linalg.lu(A.T @ Q)[1]
+        
+    Q, _ = torch.linalg.qr(A @ Q)
+    return Q
+
+def randomized_svd(M, n_components, n_oversamples=10, n_iter=2):
+    n_random = n_components + n_oversamples
+    
+    Q = torch.tensor(randomized_range_finder(M, n_random, n_iter)).to(device)
+    # project M to the (k + p) dimensional space using the basis vectors
+    M = torch.tensor(M).to(device)
+    B = Q.transpose(0, 1) @ M
+    # compute the SVD on the thin matrix: (k + p) wide
+    Uhat, s, V = torch.linalg.svd(B, full_matrices=False)
+    #Uhat, s, V = Uhat.to(device), s.to(device), V.to(device)
+    Uhat = torch.tensor(Uhat).to(device)
+    del B
+    U = Q @ Uhat
+    
+    return U[:, :n_components], s[:n_components], V[:n_components, :]
+
+
+
+# RANDOM SVD: END
