@@ -112,9 +112,8 @@ def training_fnn(fnn_net, epochs, inputs_net, real_out):
 
     final_loss = []
     batch_size = 128
+    print('Comincia ora il training della FNN')
     for epoch in range(epochs):  # loop over the dataset multiple times
-        if epoch%50==0:
-            print('Epoch '+str(epoch)+' of '+str(epochs)) #MODIF
         running_loss = 0.0
         for i in range(inputs_net.size()[0] // batch_size):
             # zero the parameter gradients
@@ -145,4 +144,4 @@ def training_fnn(fnn_net, epochs, inputs_net, real_out):
             total += labels.size(0)
 
             correct += (predicted == labels).sum().item()
-        print()
+    print('È terminato il training della rete neurale')

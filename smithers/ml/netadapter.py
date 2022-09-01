@@ -95,11 +95,11 @@ class NetAdapter():
             obtained via RandSVD (n_feat x red_dim).
         :rtype: torch.Tensor
         '''
-        u, s, v = randomized_svd(matrix_features, self.red_dim)
+        matrix_features = matrix_features.to('cpu')
+        u, s, v = randomized_svd(torch.transpose(matrix_features, 0, 1), self.red_dim)
+        return u
 
-        return u.to(device)
-
-    def _reduce(self, pre_model, post_model, train_dataset, train_loader):
+    def _reduce(self, pre_model, post_model, train_dataset, train_loader, device = device):
         '''
         Function that performs the reduction of the high dimensional
         output of the pre-model
@@ -118,7 +118,7 @@ class NetAdapter():
         :rtype: torch.tensor
     	'''
         #matrix_features = matrixize(pre_model, train_dataset, train_labels)
-        matrix_features = forward_dataset(pre_model, train_loader)
+        matrix_features = forward_dataset(pre_model, train_loader).to(device)
 
         if self.red_method == 'AS':
             #code for AS
@@ -226,7 +226,7 @@ class NetAdapter():
         return inout_map
 
     def reduce_net(self, input_network, train_dataset, train_labels,
-                   train_loader, n_class):
+                   train_loader, n_class, device = device):
         '''
         Function that performs the reduction of the network
         :param nn.Sequential input_network: sequential model representing
@@ -252,9 +252,9 @@ class NetAdapter():
         post_model = input_network[cut_idxlayer:].to(device, dtype=input_type)
         out_model = forward_dataset(input_network, train_loader)
         matrix_red, proj_mat = self._reduce(pre_model, post_model,
-                                            train_dataset, train_loader)
+                                            train_dataset, train_loader, device)
         inout_map = self._inout_mapping(matrix_red, n_class, out_model,
                                         train_labels, train_loader)
         reduced_net = RedNet(n_class, pre_model, proj_mat, inout_map)
 
-        return reduced_net
+        return reduced_net.to(device)

@@ -170,7 +170,7 @@ else:
     device = torch.device('cpu')
 
 
-def projection(proj_mat, data_loader, matrix):
+def projection(proj_mat, data_loader, matrix, device = device):
     '''
     Funtion that performs the projection onto a space (e.g. the reduced
     space) of a matrix.
@@ -185,10 +185,14 @@ def projection(proj_mat, data_loader, matrix):
     :return: reduced matrix n_images x n_red.dim
     :rtype: torch.Tensor
     '''
-
-    matrix_red = torch.zeros(0)
+    proj_mat = proj_mat.to(device)              #MODIF
+    matrix_red = torch.zeros(0).to(device)
     num_batch = len(data_loader)
+    print('Le dimensioni delle due matrici sono: proj_mat = {} e matrix (input di projection) = {}'.format(proj_mat.shape, matrix.shape))
+    print('si dovranno moltiplicare alcune righe di input_matrix per proj_matrix')
     batch_old = 0
+    print('proj_mat è salvata su {} (-1 = cpu, 0 = gpu)'.format(proj_mat.get_device()))
+    print('matrix è salvata su {} (-1 = cpu, 0 = gpu)'.format(matrix.get_device()))
     for idx_, (batch, _) in enumerate(data_loader):
         if idx_ >= num_batch:
             break
@@ -203,8 +207,74 @@ def projection(proj_mat, data_loader, matrix):
 
     return matrix_red
 
+def projection_cpu(proj_mat, data_loader, matrix):
+    '''
+    Funtion that performs the projection onto a space (e.g. the reduced
+    space) of a matrix.
 
-def forward_dataset(model, data_loader):
+    :param torch.Tensor proj_mat: projection matrix n_feat x n_red.dim.
+    :param iterable data_loader: iterable object for loading the dataset.
+        It iterates over the given dataset, obtained combining a
+        dataset(images and labels) and a sampler.
+    :param torch.Tensor matrix: matrix to project n_images x n_feat.
+        Possible way to construct it using the function matrixise in
+        utils.py.
+    :return: reduced matrix n_images x n_red.dim
+    :rtype: torch.Tensor
+    '''
+    proj_mat = proj_mat.to('cpu')
+    matrix = matrix.to('cpu')
+    print(proj_mat.shape, matrix.shape)
+    matrix_red = torch.zeros(0)
+    num_batch = len(data_loader)
+    batch_old = 0
+    for idx_, (batch, _) in enumerate(data_loader):
+        if idx_ >= num_batch:
+            break
+
+        batch = batch.to('cpu') #MODIF
+
+        with torch.no_grad():
+            #proj_data = (matrix[batch_old : batch_old + batch.size()[0], : ] @ proj_mat).cpu()
+            proj_data = (matrix[batch_old : batch_old + batch.size()[0], : ] @ proj_mat).to('cpu')
+            batch_old = batch.size()[0]
+        matrix_red = torch.cat([matrix_red, proj_data.to('cpu')])
+
+    return matrix_red
+
+
+# def forward_dataset(model, data_loader, device = device):
+#     '''
+#     Forward of a model using the whole dataset, i.e. the forward is
+#     performed by splitting the dataset in batches in order to reduce
+#     the computational effort needed.
+
+#     :param nn.Sequential/nn.Module model: model.
+#     :param iterable data_loader: iterable object for loading the dataset.
+#         It iterates over the given dataset, obtained combining a
+#         dataset(images and labels) and a sampler.
+#     :return: output of the model computed on the whole dataset with
+#         dimensions n_images x n_feat (corresponds to n_class for the last
+#         layer)
+#     :rtype: torch.Tensor
+#     '''
+#     out_model = torch.zeros(0).to(device)
+#     num_batch = len(data_loader)
+#     print('Ci sono {} batches'.format(num_batch))
+#     for idx_, (batch, target) in enumerate(data_loader):
+#         if idx_ >= num_batch:
+#             break
+#         print('Siamo alla batch batch {}'.format(idx_)) #MODIF
+#         batch = batch.to(device) #MODIF
+#         with torch.no_grad():
+#             outputs = model(batch).to(device) #MODIF
+#             outputs = torch.squeeze(outputs.flatten(1)).detach()
+#         #out_model = torch.cat([out_model, outputs.cpu()])
+#         out_model = torch.cat([out_model.to(device), outputs.to(device)]).to(device) #MODIF era riga precedente
+#     return out_model
+
+
+def forward_dataset(model, data_loader, device = device):
     '''
     Forward of a model using the whole dataset, i.e. the forward is
     performed by splitting the dataset in batches in order to reduce
@@ -219,12 +289,13 @@ def forward_dataset(model, data_loader):
         layer)
     :rtype: torch.Tensor
     '''
-    out_model = torch.zeros(0)
+    out_model = torch.zeros(0).to(device)
     num_batch = len(data_loader)
     for idx_, (batch, target) in enumerate(data_loader):
         if idx_ >= num_batch:
             break
-
+        if idx_%1000 == 0:
+            print('Siamo alla batch batch {}'.format(idx_)) #MODIF
         batch = batch.to(device) #MODIF
 
         with torch.no_grad():
@@ -234,6 +305,8 @@ def forward_dataset(model, data_loader):
         out_model = torch.cat([out_model.to(device), outputs.to(device)]).to(device) #MODIF era riga precedente
 
     return out_model
+
+    
 
 def decimate(tensor, m):
     '''
@@ -425,111 +498,66 @@ def train_kd(student,
         for param_group in optimizer.param_groups:
             param_group['lr'] = param_group['lr'] * (epoch) / (epoch + 1)
     return accuracy, train_loss_val
-""" def train_kd(student,
-             teacher,
-             device,
-             train_loader,
-             optimizer,
-             train_max_batch,
-             alpha=0.0,
-             temperature=1.,
-             lr_decrease=None,
-             epoch=1,
-             features=None):
-    '''
-    Function that retrains the model with knowledge distillation
-    when alpha=0, it reduced to the original training
-    :param nn.Module student: reduced net
-    :param nn.Module teacher: full net
-    :param torch.device device: object representing the device on
-        which a torch.Tensor is or will be allocated.    
-    :param iterable train_loader: iterable object, it load the dataset for
-        training. It iterates over the given dataset, obtained combining a
-        dataset(images and labels) and a sampler.
-    :param optimizer
-    :param train_max_batch
-    :param float alpha: regularization parameter. Default value set to 0.0, 
-        i.e. when the training is reduced to the original one
-    :param float temperature: temperature factor introduced. When T tends to 
-        infinity all the classes have the same probability, whereas when T
-        tends to 0 the targets become one-hot labels. Default value set to 1.
-    :param lr_decrease:
-    :param int epoch: epoch number
-    :return: accuracy
-    '''
-    student.train()
-    teacher.eval()
-    student.to(device)
-    teacher.to(device)
-    correct = 0.0
-    batch_old = 0
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        batch = data.size()[0]
-        optimizer.zero_grad()
-        if features is None:
-            output = student(data)
-        else:
-            output = student(data, features[batch_old : batch_old + batch, :])
-        output_teacher = teacher(data)
-        output_teacher = output_teacher[1]
-        batch_old = batch
-
-        # The Kullback-Leibler divergence loss measure
-        loss = nn.KLDivLoss()(F.log_softmax(output / temperature, dim=1),F.softmax(output_teacher / temperature, dim=1)
-                             )*(alpha*temperature*temperature) + \
-                 F.cross_entropy(output, target) * (1. - alpha)
-
-        loss.backward()
-        optimizer.step()
-
-        pred = output.data.max(1, keepdim=True)[1]
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
-    print('Train Loss kd:', loss.item() / len(train_loader.sampler))
-    train_loss_val = loss.item() / len(train_loader.sampler)
-    accuracy = correct / len(train_loader.sampler) * 100.0
-    if lr_decrease is not None:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= lr_decrease
-    else:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = param_group['lr'] * (epoch) / (epoch + 1)
-    return accuracy, train_loss_val """
-
 
 
 # RANDOM SVD: BEGIN
 
-# computes an orthonormal matrix whose range approximates the range of A
-# power_iteration_normalizer can be safe_sparse_dot (fast but unstable), LU (imbetween), or QR (slow but most accurate)
-def randomized_range_finder(A, size, n_iter = 2):
-    A = A.to(device)
-    Q = torch.randn(A.shape[1],size)
-    # Q = np.random.normal(size=(A.shape[1], size))
+# # computes an orthonormal matrix whose range approximates the range of A
+# # power_iteration_normalizer can be safe_sparse_dot (fast but unstable), LU (imbetween), or QR (slow but most accurate)
+# def randomized_range_finder(A, size, n_iter = 2, device = device):
+#     A = A.to(device)
+#     Q = torch.randn(A.shape[1],size).to(device)
+#     # Q = np.random.normal(size=(A.shape[1], size))
+    
+#     for i in range(n_iter):
+#         Q = torch.linalg.lu(A @ Q)[1].to(device)
+#         Q = torch.linalg.lu(A.T @ Q)[1].to(device)
+        
+#     Q, _ = torch.linalg.qr(A @ Q)
+#     return Q.to(device)
+
+# def randomized_svd(M, n_components, n_oversamples=10, n_iter=2, device = device):
+#     print('è iniziata la funzione randomized_svd')
+#     n_random = n_components + n_oversamples
+    
+#     Q = torch.tensor(randomized_range_finder(M, n_random, n_iter)).to(device)
+#     # project M to the (k + p) dimensional space using the basis vectors
+#     M = torch.tensor(M).to(device)
+#     B = Q.transpose(0, 1) @ M
+#     # compute the SVD on the thin matrix: (k + p) wide
+#     Uhat, s, V = torch.linalg.svd(B, full_matrices=False)
+#     #Uhat, s, V = Uhat.to(device), s.to(device), V.to(device)
+#     Uhat = torch.tensor(Uhat).to(device)
+#     del B
+#     U = Q @ Uhat
+    
+#     return U[:, :n_components], s[:n_components], V[:n_components, :]
+
+def randomized_range_finder(A, size, n_iter=5):
+    A = A.to('cpu')
+    Q = np.random.normal(size=(A.shape[1], size))
     
     for i in range(n_iter):
-        Q = torch.linalg.lu(A @ Q)[1]
-        Q = torch.linalg.lu(A.T @ Q)[1]
+        Q, _ = linalg.lu(A @ Q, permute_l=True)
+        Q, _ = linalg.lu(A.T @ Q, permute_l=True)
         
-    Q, _ = torch.linalg.qr(A @ Q)
+    Q, _ = linalg.qr(A @ Q, mode='economic')
     return Q
 
 def randomized_svd(M, n_components, n_oversamples=10, n_iter=2):
     n_random = n_components + n_oversamples
     
-    Q = torch.tensor(randomized_range_finder(M, n_random, n_iter)).to(device)
+    Q = torch.tensor(randomized_range_finder(M, n_random, n_iter),dtype = torch.float)#.cuda(0)
     # project M to the (k + p) dimensional space using the basis vectors
-    M = torch.tensor(M).to(device)
+    M = torch.tensor(M, dtype = torch.float).to('cpu') #cuda(0)
+
     B = Q.transpose(0, 1) @ M
     # compute the SVD on the thin matrix: (k + p) wide
-    Uhat, s, V = torch.linalg.svd(B, full_matrices=False)
-    #Uhat, s, V = Uhat.to(device), s.to(device), V.to(device)
-    Uhat = torch.tensor(Uhat).to(device)
+    Uhat, s, V = linalg.svd(B, full_matrices=False)
+    Uhat = torch.tensor(Uhat).to('cpu')
     del B
     U = Q @ Uhat
     
     return U[:, :n_components], s[:n_components], V[:n_components, :]
-
-
 
 # RANDOM SVD: END
