@@ -243,36 +243,6 @@ def projection_cpu(proj_mat, data_loader, matrix):
     return matrix_red
 
 
-# def forward_dataset(model, data_loader, device = device):
-#     '''
-#     Forward of a model using the whole dataset, i.e. the forward is
-#     performed by splitting the dataset in batches in order to reduce
-#     the computational effort needed.
-
-#     :param nn.Sequential/nn.Module model: model.
-#     :param iterable data_loader: iterable object for loading the dataset.
-#         It iterates over the given dataset, obtained combining a
-#         dataset(images and labels) and a sampler.
-#     :return: output of the model computed on the whole dataset with
-#         dimensions n_images x n_feat (corresponds to n_class for the last
-#         layer)
-#     :rtype: torch.Tensor
-#     '''
-#     out_model = torch.zeros(0).to(device)
-#     num_batch = len(data_loader)
-#     print('Ci sono {} batches'.format(num_batch))
-#     for idx_, (batch, target) in enumerate(data_loader):
-#         if idx_ >= num_batch:
-#             break
-#         print('Siamo alla batch batch {}'.format(idx_)) #MODIF
-#         batch = batch.to(device) #MODIF
-#         with torch.no_grad():
-#             outputs = model(batch).to(device) #MODIF
-#             outputs = torch.squeeze(outputs.flatten(1)).detach()
-#         #out_model = torch.cat([out_model, outputs.cpu()])
-#         out_model = torch.cat([out_model.to(device), outputs.to(device)]).to(device) #MODIF era riga precedente
-#     return out_model
-
 
 def forward_dataset(model, data_loader, device = device):
     '''
@@ -295,13 +265,12 @@ def forward_dataset(model, data_loader, device = device):
         if idx_ >= num_batch:
             break
         if idx_%1000 == 0:
-            print('Siamo alla batch batch {}'.format(idx_)) #MODIF
+            print('Forward batch number {}'.format(idx_)) #MODIF
         batch = batch.to(device) #MODIF
 
         with torch.no_grad():
             outputs = model(batch).to(device) #MODIF
             outputs = torch.squeeze(outputs.flatten(1)).detach()
-        #out_model = torch.cat([out_model, outputs.cpu()])
         out_model = torch.cat([out_model.to(device), outputs.to(device)]).to(device) #MODIF era riga precedente
 
     return out_model
@@ -500,38 +469,7 @@ def train_kd(student,
     return accuracy, train_loss_val
 
 
-# RANDOM SVD: BEGIN
-
-# # computes an orthonormal matrix whose range approximates the range of A
-# # power_iteration_normalizer can be safe_sparse_dot (fast but unstable), LU (imbetween), or QR (slow but most accurate)
-# def randomized_range_finder(A, size, n_iter = 2, device = device):
-#     A = A.to(device)
-#     Q = torch.randn(A.shape[1],size).to(device)
-#     # Q = np.random.normal(size=(A.shape[1], size))
-    
-#     for i in range(n_iter):
-#         Q = torch.linalg.lu(A @ Q)[1].to(device)
-#         Q = torch.linalg.lu(A.T @ Q)[1].to(device)
-        
-#     Q, _ = torch.linalg.qr(A @ Q)
-#     return Q.to(device)
-
-# def randomized_svd(M, n_components, n_oversamples=10, n_iter=2, device = device):
-#     print('è iniziata la funzione randomized_svd')
-#     n_random = n_components + n_oversamples
-    
-#     Q = torch.tensor(randomized_range_finder(M, n_random, n_iter)).to(device)
-#     # project M to the (k + p) dimensional space using the basis vectors
-#     M = torch.tensor(M).to(device)
-#     B = Q.transpose(0, 1) @ M
-#     # compute the SVD on the thin matrix: (k + p) wide
-#     Uhat, s, V = torch.linalg.svd(B, full_matrices=False)
-#     #Uhat, s, V = Uhat.to(device), s.to(device), V.to(device)
-#     Uhat = torch.tensor(Uhat).to(device)
-#     del B
-#     U = Q @ Uhat
-    
-#     return U[:, :n_components], s[:n_components], V[:n_components, :]
+# RANDOM SVD
 
 def randomized_range_finder(A, size, n_iter=5):
     A = A.to('cpu')
@@ -559,5 +497,3 @@ def randomized_svd(M, n_components, n_oversamples=10, n_iter=2):
     U = Q @ Uhat
     
     return U[:, :n_components], s[:n_components], V[:n_components, :]
-
-# RANDOM SVD: END
