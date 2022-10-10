@@ -6,6 +6,10 @@ import torch.nn as nn
 import torchvision
 
 from smithers.ml.utils import decimate
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
 
 class VGG(nn.Module):
@@ -218,7 +222,7 @@ class VGG(nn.Module):
             pretrained_net = torchvision.models.vgg16(pretrained=True)
         else:
             pretrained_net = torch.load(self.pretrain_weights,
-                                        torch.device('cpu'))
+                                        torch.device(device))
            # pretrained_net = pretrained_net['model']
         pretrained_state_dict = pretrained_net.state_dict()
         pretrained_param_names = list(pretrained_state_dict.keys())
@@ -267,3 +271,31 @@ class VGG(nn.Module):
         print("\nLoaded base model.\n")
 
         return state_dict
+
+""" def save_checkpoint(epoch, model, optimizer):
+    '''
+    Save model checkpoint.
+    :param scalar epoch: epoch number
+    :param list model: list of constructed classes that compose our network
+    :param torch.Tensor optimizer: optimizer chosen
+    :return: path to the checkpoint file
+    :rtype: str
+    '''
+    state = {'epoch': epoch, 'model': model, 'optimizer': optimizer}
+    filename = 'checkpoint_ssd300.pth.tar'
+    torch.save(state, filename)
+    return filename """
+
+def save_checkpoint(epoch, model, path, optimizer):
+    '''
+    Save model checkpoint.
+    :param scalar epoch: epoch number
+    :param list model: list of constructed classes that compose our network
+    :param str path: path to the checkpoint location
+    :param torch.Tensor optimizer: optimizer chosen
+    '''
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict()
+            }, path)
